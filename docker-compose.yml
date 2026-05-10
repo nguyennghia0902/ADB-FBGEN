@@ -1,0 +1,70 @@
+version: "3.9"
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: adb_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       adb
+      POSTGRES_USER:     adb
+      POSTGRES_PASSWORD: adb
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./mydb/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U adb -d adb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  neo4j:
+    image: neo4j:5.20-community
+    container_name: adb_neo4j
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/adb_password 
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_dbms_security_procedures_unrestricted: apoc.*
+      NEO4J_server_directories_import: /cypher-import
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - ./mydb/neo4j:/cypher-import:ro
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p adb_password 'RETURN 1' || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+
+  neo4j-seeder:
+    image: neo4j:5.20-community
+    container_name: adb_neo4j_seeder
+    restart: "no"
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    # ✅ Dùng list thay vì string để tránh lỗi YAML dấu ngoặc kép
+    entrypoint:
+      - bash
+      - -c
+      - |
+        echo '⏳ Waiting 5s extra...' &&
+        sleep 5 &&
+        echo '🌱 Running seed.cypher...' &&
+        cypher-shell -a bolt://neo4j:7687 -u neo4j -p adb_password --file /cypher-import/seed.cypher &&
+        echo '✅ Seed done!'
+    volumes:
+      - ./mydb/neo4j:/cypher-import:ro
+
+volumes:
+  pg_data:
+  neo4j_data:
+  neo4j_logs:
