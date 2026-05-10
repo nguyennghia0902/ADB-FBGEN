@@ -1,0 +1,10 @@
+streamlit
+groq
+huggingface-hub
+datasets
+torch
+torchvision
+transformers
+pandas
+numpy
+accelerate
